@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entrada – Conferencia Voz que Clama 2026</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #f4f1ec;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    /* ─── TICKET ─── */
+    .ticket {
+      width: 520px;
+      background: #ffffff;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid #e8e2d9;
+      box-shadow: 0 2px 24px rgba(0,0,0,0.07);
+    }
+
+    /* ─── HEADER ─── */
+    .tk-top {
+      background: #050a14;         /* ← color de fondo del encabezado */
+      padding: 32px 36px 26px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Círculos decorativos del header */
+    .tk-top::before {
+      content: '';
+      position: absolute;
+      top: -40px; right: -40px;
+      width: 200px; height: 200px;
+      border-radius: 50%;
+      background: rgba(201,168,76,0.08);
+    }
+    .tk-top::after {
+      content: '';
+      position: absolute;
+      bottom: -60px; left: 30px;
+      width: 160px; height: 160px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .ev-tag {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      color: #c9a84c;             /* ← color del tag superior */
+      text-transform: uppercase;
+      border: 1px solid rgba(201,168,76,0.5);
+      border-radius: 4px;
+      padding: 3px 10px;
+      margin-bottom: 16px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .ev-title {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: #ffffff;             /* ← color del título principal */
+      line-height: 1.1;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      position: relative;
+      z-index: 1;
+      margin-bottom: 8px;
+    }
+
+    .ev-sub {
+      font-family: 'Playfair Display', serif;
+      font-style: italic;
+      font-size: 17px;
+      color: #c9a84c;             /* ← color del subtítulo */
+      letter-spacing: 0.04em;
+      position: relative;
+      z-index: 1;
+    }
+
+    .ev-divider {
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      margin: 20px 0 16px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .ev-dates {
+      display: flex;
+      gap: 28px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .ev-date-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ev-date-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #c9a84c;        /* ← color de los puntos de fecha */
+      flex-shrink: 0;
+    }
+
+    .ev-date-text {
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+      letter-spacing: 0.02em;
+    }
+
+    .ev-date-text strong {
+      color: rgba(255,255,255,0.9);
+      font-weight: 600;
+    }
+
+    /* ─── BODY ─── */
+    .tk-body {
+      padding: 26px 36px 22px;
+      background: #ffffff;
+    }
+
+    /* Fila del asistente */
+    .attendee-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 18px;
+      background: #f9f7f4;
+      border: 1px solid #ede8e0;
+      border-radius: 12px;
+      margin-bottom: 18px;
+    }
+
+    .avatar {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      background: #0f172a;        /* ← color del avatar */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 700;
+      color: #c9a84c;             /* ← color de las iniciales */
+      flex-shrink: 0;
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    .att-info { flex: 1; }
+
+    .field-label {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      color: #a89e8e;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .att-name {
+      font-size: 18px;
+      font-weight: 600;
+      color: #0f172a;
+      letter-spacing: -0.01em;
+    }
+
+    .dni-col { text-align: right; }
+
+    .dni-val {
+      font-size: 14px;
+      font-weight: 500;
+      color: #4a4038;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.06em;
+    }
+
+    /* Grid de info */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .info-card {
+      background: #f9f7f4;
+      border: 1px solid #ede8e0;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .info-card.full { grid-column: 1 / -1; }
+
+    .info-val {
+      font-size: 13px;
+      font-weight: 500;
+      color: #2a2520;
+      line-height: 1.4;
+    }
+
+    .info-val.gold { color: #8a6010; }  /* ← color del nombre del salón */
+
+    .info-sub {
+      font-size: 11px;
+      color: #a89e8e;
+      margin-top: 2px;
+    }
+
+    /* ─── SEPARADOR TIPO TICKET ─── */
+    .sep {
+      display: flex;
+      align-items: center;
+    }
+
+    .sep-circle {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: #f4f1ec;
+      border: 1px solid #e8e2d9;
+      flex-shrink: 0;
+    }
+
+    .sep-dash {
+      flex: 1;
+      border-top: 1.5px dashed #ddd8ce;
+    }
+
+    /* ─── FOOTER ─── */
+    .tk-foot {
+      padding: 22px 36px 28px;
+      background: #faf8f5;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .qr-box {
+      background: #fff;
+      border: 1px solid #ede8e0;
+      border-radius: 10px;
+      padding: 8px;
+      flex-shrink: 0;
+    }
+
+    .foot-info { flex: 1; }
+
+    .foot-title {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      color: #a89e8e;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .foot-note {
+      font-size: 12px;
+      color: #6b6055;
+      line-height: 1.6;
+    }
+
+    .personal-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      color: #7a5c10;
+      text-transform: uppercase;
+      background: rgba(201,168,76,0.1);
+      border: 1px solid rgba(201,168,76,0.35);
+      border-radius: 4px;
+      padding: 3px 9px;
+      margin-top: 10px;
+    }
+
+    .orgs {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .org-pill {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #a89e8e;
+      background: #eee9e0;
+      border-radius: 4px;
+      padding: 3px 9px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ticket">
+
+    <!-- ═══════════════════════════════ -->
+    <!--           ENCABEZADO           -->
+    <!-- ═══════════════════════════════ -->
+    <div class="tk-top">
+      <div class="ev-tag">Entrada · 2026</div>
+
+      <!-- TÍTULO PRINCIPAL -->
+      <div class="ev-title">Conferencia Voz que Clama</div>
+
+      <!-- SUBTÍTULO -->
+      <div class="ev-sub">"La meta es Él"</div>
+
+    </div>
+
+    <!-- ═══════════════════════════════ -->
+    <!--             CUERPO             -->
+    <!-- ═══════════════════════════════ -->
+    <div class="tk-body">
+
+      <!-- DATOS DEL ASISTENTE -->
+      <div class="attendee-row">
+        <!-- Iniciales del avatar (cambiar manualmente) -->
+        <div class="avatar">SC</div>
+
+        <div class="att-info">
+          <div class="field-label">Asistente</div>
+          <!-- NOMBRE COMPLETO -->
+          <div class="att-name">Sofia Caselli</div>
+        </div>
+
+        <div class="dni-col">
+          <div class="field-label">DNI</div>
+          <!-- NÚMERO DE DNI -->
+          <div class="dni-val">40996190</div>
+        </div>
+      </div>
+
+      <!-- INFO DEL EVENTO -->
+      <div class="info-grid">
+        <div class="info-card">
+          <div class="field-label">Lugar</div>
+          <div class="info-val gold"><a href="https://maps.app.goo.gl/H1apm6XmL8bmH9Hr6" target="_blank" style="color: inherit; text-decoration: underline;">Salón "Yapire"</a></div>
+          <div class="info-sub">Corrientes, Argentina</div>
+        </div>
+        <div class="info-card">
+          <div class="field-label">Fechas</div>
+          <div class="ev-dates" style="flex-direction: column; gap: 6px; margin-top: 4px;">
+            <div class="ev-date-item">
+              <div class="ev-date-dot"></div>
+              <div class="ev-date-text" style="color: #4a4038;"><strong style="color: #0f172a;">Vie 23</strong> oct · 09 a 22:30 hs</div>
+            </div>
+            <div class="ev-date-item">
+              <div class="ev-date-dot"></div>
+              <div class="ev-date-text" style="color: #4a4038;"><strong style="color: #0f172a;">Sáb 24</strong> oct · 09 a 22:30 hs</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ═══════════════════════════════ -->
+    <!--           SEPARADOR            -->
+    <!-- ═══════════════════════════════ -->
+    <div class="sep">
+      <div class="sep-circle" style="margin-left: -10px;"></div>
+      <div class="sep-dash"></div>
+      <div class="sep-circle" style="margin-right: -10px;"></div>
+    </div>
+
+    <!-- ═══════════════════════════════ -->
+    <!--              PIE               -->
+    <!-- ═══════════════════════════════ -->
+    <div class="tk-foot">
+
+      <!-- CÓDIGO QR (reemplazar el SVG por imagen real si tenés el QR) -->
+      <div class="qr-box">
+        <svg width="88" height="88" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+          <rect width="80" height="80" fill="white"/>
+          <rect x="4" y="4" width="22" height="22" rx="3" fill="#0f172a"/>
+          <rect x="8" y="8" width="14" height="14" rx="1.5" fill="white"/>
+          <rect x="11" y="11" width="8" height="8" rx="1" fill="#0f172a"/>
+          <rect x="54" y="4" width="22" height="22" rx="3" fill="#0f172a"/>
+          <rect x="58" y="8" width="14" height="14" rx="1.5" fill="white"/>
+          <rect x="61" y="11" width="8" height="8" rx="1" fill="#0f172a"/>
+          <rect x="4" y="54" width="22" height="22" rx="3" fill="#0f172a"/>
+          <rect x="8" y="58" width="14" height="14" rx="1.5" fill="white"/>
+          <rect x="11" y="61" width="8" height="8" rx="1" fill="#0f172a"/>
+          <rect x="32" y="4" width="6" height="6" rx="1" fill="#0f172a"/>
+          <rect x="40" y="4" width="6" height="6" rx="1" fill="#0f172a"/>
+          <rect x="48" y="6" width="4" height="4" rx="1" fill="#0f172a"/>
+          <rect x="32" y="12" width="4" height="4" rx="1" fill="#0f172a"/>
+          <rect x="38" y="12" width="6" height="4" rx="1" fill="#0f172a"/>
+          <rect x="4" y="32" width="6" height="4" rx="1" fill="#0f172a"/>
+          <rect x="12" y="32" width="4" height="6" rx="1" fill="#0f172a"/>
+          <rect x="18" y="30" width="8" height="4" rx="1" fill="#0f172a"/>
+          <rect x="28" y="28" width="6" height="6" rx="1" fill="#0f172a"/>
+          <rect x="36" y="28" width="4" height="10" rx="1" fill="#0f172a"/>
+          <rect x="42" y="30" width="8" height="4" rx="1" fill="#0f172a"/>
+          <rect x="52" y="28" width="4" height="4" rx="1" fill="#0f172a"/>
+          <rect x="58" y="28" width="6" height="6" rx="1" fill="#0f172a"/>
+          <rect x="66" y="30" width="10" height="4" rx="1" fill="#0f172a"/>
+          <rect x="4" y="40" width="10" height="4" rx="1" fill="#0f172a"/>
+          <rect x="16" y="40" width="6" height="4" rx="1" fill="#0f172a"/>
+          <rect x="24" y="38" width="4" height="8" rx="1" fill="#0f172a"/>
+          <rect x="30" y="42" width="8" height="4" rx="1" fill="#0f172a"/>
+          <rect x="40" y="38" width="4" height="6" rx="1" fill="#0f172a"/>
+          <rect x="46" y="40" width="6" height="4" rx="1" fill="#0f172a"/>
+          <rect x="54" y="38" width="4" height="8" rx="1" fill="#0f172a"/>
+          <rect x="60" y="42" width="8" height="4" rx="1" fill="#0f172a"/>
+          <rect x="70" y="38" width="6" height="6" rx="1" fill="#0f172a"/>
+          <rect x="4" y="48" width="6" height="4" rx="1" fill="#0f172a"/>
+          <rect x="12" y="48" width="8" height="4" rx="1" fill="#0f172a"/>
+          <rect x="32" y="48" width="6" height="4" rx="1" fill="#0f172a"/>
+          <rect x="40" y="50" width="4" height="6" rx="1" fill="#0f172a"/>
+          <rect x="46" y="48" width="8" height="4" rx="1" fill="#0f172a"/>
+          <rect x="56" y="48" width="4" height="4" rx="1" fill="#0f172a"/>
+          <rect x="62" y="50" width="6" height="6" rx="1" fill="#0f172a"/>
+          <rect x="70" y="48" width="6" height="4" rx="1" fill="#0f172a"/>
+          <rect x="32" y="56" width="4" height="4" rx="1" fill="#0f172a"/>
+          <rect x="38" y="58" width="8" height="4" rx="1" fill="#0f172a"/>
+          <rect x="48" y="56" width="4" height="6" rx="1" fill="#0f172a"/>
+          <rect x="54" y="58" width="8" height="4" rx="1" fill="#0f172a"/>
+          <rect x="64" y="56" width="4" height="8" rx="1" fill="#0f172a"/>
+          <rect x="70" y="58" width="6" height="4" rx="1" fill="#0f172a"/>
+          <rect x="32" y="64" width="6" height="6" rx="1" fill="#0f172a"/>
+          <rect x="40" y="66" width="4" height="4" rx="1" fill="#0f172a"/>
+          <rect x="46" y="64" width="6" height="6" rx="1" fill="#0f172a"/>
+          <rect x="54" y="66" width="8" height="4" rx="1" fill="#0f172a"/>
+          <rect x="66" y="64" width="10" height="4" rx="1" fill="#0f172a"/>
+          <rect x="70" y="70" width="6" height="6" rx="1" fill="#0f172a"/>
+        </svg>
+        <!--
+          Para usar tu QR real, reemplazá el SVG de arriba por:
+          <img src="tu-qr.png" width="88" height="88" style="display:block;">
+        -->
+      </div>
+
+      <div class="foot-info">
+        <div class="foot-title">Tu entrada digital</div>
+        <div class="foot-note">
+          Mostrá este código QR a la entrada.<br>
+          No hace falta imprimir.
+        </div>
+        <div class="personal-pill">● Personal e intransferible</div>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>

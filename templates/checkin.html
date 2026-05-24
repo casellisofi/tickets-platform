@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Check-in del Evento</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Check-in</h1>
+      <p>Usá la cámara para escanear el QR de la entrada.</p>
+    </div>
+    <div class="topbar-actions">
+      <span class="event-label">Evento: {{ evento }}</span>
+      <a class="button button-secondary" href="{{ url_for('logout') }}">Cerrar sesión</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="panel">
+      <div class="panel-card">
+        <h2>Escáner QR</h2>
+        <div class="video-card">
+          <video id="video" playsinline autoplay muted></video>
+          <div id="video-overlay">Esperando QR...</div>
+        </div>
+        <button id="start-camera" class="button">Iniciar cámara</button>
+        <div id="camera-warning" class="alert alert-warning hidden">
+          Este navegador o dispositivo no puede acceder a la cámara.
+          Usá el botón de abajo o copiá el texto manualmente.
+        </div>
+
+        <div id="manual-wrapper" class="manual-box hidden">
+          <label for="manual-input">Pegar contenido del QR</label>
+          <textarea id="manual-input" rows="4" placeholder='{"id": 1, "nombre": "Juan Pérez", "dni": "38123456", "evento": "Nombre del Evento"}'></textarea>
+          <button id="parse-manual" class="button button-secondary" type="button">Procesar texto manual</button>
+        </div>
+
+        <div id="scan-result" class="card hidden">
+          <h3>Persona detectada</h3>
+          <div class="detail-row"><span>Nombre</span><strong id="detail-nombre">-</strong></div>
+          <div class="detail-row"><span>DNI</span><strong id="detail-dni">-</strong></div>
+          <div class="detail-row"><span>Entrada N°</span><strong id="detail-id">-</strong></div>
+          <div class="detail-row"><span>Evento</span><strong id="detail-evento">-</strong></div>
+          <button id="checkin-button" class="button button-primary" type="button">Marcar presente</button>
+        </div>
+
+        <div id="scan-message" class="message"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-card">
+        <div class="section-heading">
+          <h2>Asistentes presentes</h2>
+          <button id="refresh-button" class="button button-secondary" type="button">Actualizar</button>
+        </div>
+        <div id="checkin-list" class="checkin-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const EVENT_NAME = "{{ evento | escape }}";
+  </script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

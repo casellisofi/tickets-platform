@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Check-in</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <main class="login-page">
+    <div class="login-card">
+      <h1>Check-in interno</h1>
+      <p>Accedé con usuario y contraseña para usar el sistema de entrada.</p>
+      {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+      {% endif %}
+      <form method="post" action="{{ url_for('login') }}">
+        <label for="username">Usuario</label>
+        <input id="username" name="username" type="text" autocomplete="username" required>
+        <label for="password">Contraseña</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Ingresar</button>
+      </form>
+      <div class="hint">
+        Usuario por defecto: <strong>admin</strong><br>
+        Contraseña por defecto: <strong>evento123</strong>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
