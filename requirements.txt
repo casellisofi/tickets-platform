@@ -7,3 +7,7 @@ qrcode[pil]>=7.4
 Pillow>=10.0
 openpyxl>=3.1
 reportlab>=4.0
+
+# Envío automático por WhatsApp Web
+pywhatkit>=5.4
+pyautogui>=0.9.54

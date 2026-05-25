@@ -17,14 +17,9 @@ env/
 # Variables de entorno — NUNCA commitear esto
 .env
 
-# Base de datos generada en tiempo de ejecución
+# Datos de ejecución (datos personales, generados en runtime)
+data/
 checkin.db
-
-# Entradas PDF y archivos generados (contienen datos personales)
-entradas_generadas/
-
-# Excel con datos reales de asistentes (datos personales)
-asistentes.xlsx
 
 # Logs
 *.log

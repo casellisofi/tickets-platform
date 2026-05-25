@@ -16,6 +16,7 @@ CONFIGURACIÓN:
 import qrcode
 import json
 import os
+import re
 import smtplib
 
 try:
@@ -75,7 +76,7 @@ CONFIG = {
     # Datos del evento
     "nombre_evento": "CONFERENCIA VOZ QUE CLAMA 2026",
     "evento_lema": "LA META ES ÉL",
-    "fecha_evento":  "Viernes 23 de octubre 09:00hs al Sábado 24 de octubre 22:30hs",
+    "fecha_evento":  "Viernes 23 y Sábado 24 de Octubre",
     "lugar_evento":  "Salón de Conferencias \"Yapire\" - Corrientes, Argentina",
 
     # Logo del evento (ruta a imagen PNG/JPG, o None para no usar logo)
@@ -91,7 +92,7 @@ CONFIG = {
 
     # En modo de prueba, solo procesar este email.
     # Si está en None, se procesa todo el Excel.
-    "test_email": None,
+    "test_email": "josiascorrea605@gmail.com",
 
     # Número WhatsApp del organizador (con código de país, sin + ni espacios)
     # Se usa para el link de contacto en la entrada, NO para el envío
@@ -109,6 +110,12 @@ CONFIG = {
 
     # Color principal de la entrada (RGB)
     "color_primario": (15, 23, 42),    # Negro azulado (diseño del ticket)
+
+    # Coordenadas (X, Y) de WhatsApp Web para adjuntar PDF.
+    # Sacar con: python encontrar_coordenadas.py
+    # Cambian según resolución/zoom del navegador — re-medir si fallan.
+    "wa_coord_clip":       (710, 948),   # botón "+" abajo izquierda
+    "wa_coord_documento":  (710, 544),   # opción "Documento" del menú
 }
 # ============================================================
 
@@ -136,17 +143,22 @@ def leer_excel():
             col_map["email"] = i
         elif "celular" in h or "telefono" in h or "phone" in h or "whatsapp" in h:
             col_map["celular"] = i
+        elif "estado" in h:
+            col_map["estado"] = i
 
     asistentes = []
     for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         if not any(row):  # Fila vacía
             continue
+        estado_raw = row[col_map["estado"]] if "estado" in col_map else ""
         asistente = {
             "id": row_num - 1,  # ID correlativo
             "nombre": str(row[col_map.get("nombre", 0)] or "").strip(),
             "dni":    str(row[col_map.get("dni", 1)] or "").strip(),
             "email":  str(row[col_map.get("email", 2)] or "").strip(),
             "celular": str(row[col_map.get("celular", 3)] or "").strip(),
+            "estado":  str(estado_raw or "").strip().lower(),
+            "row_num": row_num,  # para actualizar el Excel despues
         }
         if asistente["nombre"]:  # Solo procesar filas con nombre
             asistentes.append(asistente)
@@ -225,8 +237,8 @@ def generar_entrada_pdf(asistente):
     s_name  = ParagraphStyle("name",  fontSize=15, fontName=_FONT_BOLD, textColor=C_DARK)
     s_dni   = ParagraphStyle("dni",   fontSize=12, fontName=_FONT_BOLD, textColor=C_MED,
                               alignment=TA_RIGHT)
-    s_gold  = ParagraphStyle("gld",   fontSize=12, fontName=_FONT_BOLD, textColor=C_GOLD_D)
-    s_sub2  = ParagraphStyle("sub2",  fontSize=10, fontName=_FONT_REG,  textColor=C_MUTE)
+    s_gold  = ParagraphStyle("gld",   fontSize=12, fontName=_FONT_BOLD, textColor=C_GOLD_D, leading=15)
+    s_sub2  = ParagraphStyle("sub2",  fontSize=10, fontName=_FONT_REG,  textColor=C_MUTE,   leading=15)
     s_date  = ParagraphStyle("date",  fontSize=10, fontName=_FONT_REG,  textColor=C_MED, leading=15)
     s_ftit  = ParagraphStyle("ftit",  fontSize=8,  fontName=_FONT_BOLD, textColor=C_MUTE, spaceAfter=4)
     s_fnote = ParagraphStyle("fnote", fontSize=10, fontName=_FONT_REG,
@@ -252,8 +264,8 @@ def generar_entrada_pdf(asistente):
         ("TOPPADDING",    (0,0), (0,0),   18),
         ("BOTTOMPADDING", (0,0), (0,0),    2),
         ("TOPPADDING",    (0,1), (0,1),    4),
-        ("BOTTOMPADDING", (0,1), (0,1),    4),
-        ("TOPPADDING",    (0,2), (0,2),    2),
+        ("BOTTOMPADDING", (0,1), (0,1),   14),
+        ("TOPPADDING",    (0,2), (0,2),    6),
         ("BOTTOMPADDING", (0,2), (0,2),   18),
     ]))
 
@@ -308,8 +320,8 @@ def generar_entrada_pdf(asistente):
     half = (W - CGAP) / 2
 
     lugar_link = (
-        f'<a href="{maps_url}" color="#8a6010"><u>Salón "Yapire"</u></a>'
-        if maps_url else 'Salón "Yapire"'
+        f'<a href="{maps_url}" color="#8a6010"><u>Salón de Conferencias \"Yapire\"</u></a>'
+        if maps_url else 'Salón de Conferencias \"Yapire\"'
     )
     lugar_card = Table([
         [Paragraph("LUGAR", s_lbl)],
@@ -323,8 +335,8 @@ def generar_entrada_pdf(asistente):
         ("RIGHTPADDING",  (0,0), (-1,-1), CPAD),
         ("TOPPADDING",    (0,0), (0,0),   CPAD),
         ("BOTTOMPADDING", (0,-1),(0,-1),  CPAD),
-        ("TOPPADDING",    (0,1), (0,-1),   3),
-        ("BOTTOMPADDING", (0,0), (0,-2),   1),
+        ("TOPPADDING",    (0,1), (0,-1),   4),
+        ("BOTTOMPADDING", (0,0), (0,-2),   2),
     ]))
 
     fechas_card = Table([
@@ -345,6 +357,7 @@ def generar_entrada_pdf(asistente):
 
     grid = Table([[lugar_card, "", fechas_card]], colWidths=[half, CGAP, half])
     grid.setStyle(TableStyle([
+        ("VALIGN",        (0,0), (-1,-1), "TOP"),
         ("LEFTPADDING",   (0,0), (-1,-1), 0),
         ("RIGHTPADDING",  (0,0), (-1,-1), 0),
         ("TOPPADDING",    (0,0), (-1,-1), 0),
@@ -361,37 +374,39 @@ def generar_entrada_pdf(asistente):
         ("BOTTOMPADDING", (0,0), (-1,-1), 6),
     ]))
 
-    # ── PIE CON QR ────────────────────────────────────────────────
-    FPAD     = 14
-    QR_W     = 2.5*cm
-    QR_GAP   = 10
-    foot_iW  = W - 2*FPAD
-    text_col = foot_iW - QR_W - QR_GAP
+    # ── PIE CON QR — centrado ─────────────────────────────────────
+    FPAD  = 14
+    QR_W  = 7*cm
+
+    s_ftit_c  = ParagraphStyle("ftit_c",  fontSize=8,  fontName=_FONT_BOLD, textColor=C_MUTE,
+                                spaceAfter=6, alignment=TA_CENTER)
+    s_fnote_c = ParagraphStyle("fnote_c", fontSize=10, fontName=_FONT_REG,
+                                textColor=colors.HexColor("#6b6055"), leading=16, alignment=TA_CENTER)
+    s_pill_c  = ParagraphStyle("pill_c",  fontSize=8,  fontName=_FONT_BOLD,
+                                textColor=colors.HexColor("#7a5c10"), alignment=TA_CENTER)
 
     qr_img = RLImage(qr_tmp_path, width=QR_W, height=QR_W)
 
-    foot_inner = Table([[
-        qr_img,
-        [
-            Paragraph("TU ENTRADA DIGITAL", s_ftit),
-            Paragraph("Mostrá este código QR a la entrada.<br/>No hace falta imprimir.", s_fnote),
-            Spacer(1, 4),
-            Paragraph("* PERSONAL E INTRANSFERIBLE", s_pill),
-        ],
-    ]], colWidths=[QR_W + QR_GAP, text_col])
-    foot_inner.setStyle(TableStyle([
-        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
-        ("LEFTPADDING",   (0,0), (0,-1),   0),
-        ("RIGHTPADDING",  (0,0), (0,-1),   QR_GAP),
-        ("LEFTPADDING",   (1,0), (1,-1),   0),
-        ("RIGHTPADDING",  (1,0), (1,-1),   0),
-        ("TOPPADDING",    (0,0), (-1,-1),  0),
-        ("BOTTOMPADDING", (0,0), (-1,-1),  0),
+    foot_content = Table([
+        [qr_img],
+        [Spacer(1, 10)],
+        [Paragraph("TU ENTRADA DIGITAL", s_ftit_c)],
+        [Paragraph("Mostrá este código QR a la entrada.<br/>No hace falta imprimir.", s_fnote_c)],
+        [Spacer(1, 4)],
+        [Paragraph("* PERSONAL E INTRANSFERIBLE", s_pill_c)],
+    ], colWidths=[W - 2*FPAD])
+    foot_content.setStyle(TableStyle([
+        ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+        ("TOPPADDING",    (0,0), (-1,-1), 0),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+        ("LEFTPADDING",   (0,0), (-1,-1), 0),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 0),
     ]))
 
-    foot_tbl = Table([[foot_inner]], colWidths=[W])
+    foot_tbl = Table([[foot_content]], colWidths=[W])
     foot_tbl.setStyle(TableStyle([
         ("BACKGROUND",    (0,0), (-1,-1), C_FOOT),
+        ("ALIGN",         (0,0), (-1,-1), "CENTER"),
         ("LEFTPADDING",   (0,0), (-1,-1), FPAD),
         ("RIGHTPADDING",  (0,0), (-1,-1), FPAD),
         ("TOPPADDING",    (0,0), (-1,-1), FPAD),
@@ -458,6 +473,10 @@ def enviar_email(asistente, ruta_pdf):
                 <td style="padding: 6px 0; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: #a89e8e; text-transform: uppercase;">Titular</td>
                 <td style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #0f172a;">{asistente['nombre']}</td>
               </tr>
+              <tr style="border-top: 1px solid #ede8e0;">
+                <td style="padding: 6px 0; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: #a89e8e; text-transform: uppercase;">Fecha</td>
+                <td style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #0f172a;">{CONFIG['fecha_evento']}</td>
+              </tr>
             </table>
           </div>
 
@@ -517,29 +536,255 @@ def generar_link_whatsapp(asistente, ruta_pdf):
     return link
 
 
-def procesar_asistentes(solo_email=True, abrir_whatsapp=False):
+def _normalizar_numero_wa(celular):
+    """Normaliza el número de celular al formato internacional con +."""
+    numero = celular.replace("+", "").replace(" ", "").replace("-", "")
+    if numero.startswith("0"):
+        numero = "54" + numero[1:]
+    if not numero.startswith("54") and len(numero) <= 10:
+        numero = "54" + numero
+    return "+" + numero
+
+
+def enviar_whatsapp_auto(asistente, ruta_pdf, adjuntar_pdf=True):
+    """
+    Envía el mensaje + PDF por WhatsApp Web usando pywhatkit y pyautogui.
+    Requisitos:
+      - Estar logueado en WhatsApp Web en el navegador por defecto.
+      - No mover el mouse mientras se ejecuta (pyautogui simula clicks/teclas).
+    """
+    import pywhatkit
+    import pyautogui
+    import time
+
+    numero = _normalizar_numero_wa(asistente["celular"])
+
+    mensaje = (
+        f"¡Hola {asistente['nombre'].split()[0]}! 👋\n"
+        f"Te enviamos tu entrada para *{CONFIG['nombre_evento']}*.\n\n"
+        f"📅 *Fecha:* {CONFIG['fecha_evento']}\n"
+        f"📍 *Lugar:* {CONFIG['lugar_evento']}\n\n"
+        f"También te llegó por email tu entrada. No la pierdas. ¡Te esperamos! 🎉"
+    )
+
+    # Abre WhatsApp Web y envía el mensaje de texto.
+    pywhatkit.sendwhatmsg_instantly(
+        phone_no=numero,
+        message=mensaje,
+        wait_time=20,
+        tab_close=False,
+    )
+    time.sleep(6)
+
+    if not adjuntar_pdf:
+        return
+
+    # Adjuntar PDF: clickeamos el botón "+" y después la opción "Documento".
+    # Las coordenadas vienen de CONFIG y dependen de resolución/zoom del navegador.
+    ruta_abs = os.path.abspath(ruta_pdf)
+    clip_x, clip_y = CONFIG["wa_coord_clip"]
+    doc_x,  doc_y  = CONFIG["wa_coord_documento"]
+
+    pyautogui.click(clip_x, clip_y)   # abre el menú adjuntar
+    time.sleep(1.5)
+    pyautogui.click(doc_x, doc_y)     # elige "Documento" → abre el selector de archivos del SO
+    time.sleep(2)
+
+    # En el cuadro de diálogo del SO, escribir la ruta del PDF y Enter.
+    # Usamos pyperclip + Ctrl+V porque pyautogui.write() puede repetir caracteres
+    # en rutas largas con barras invertidas.
+    import pyperclip
+    pyperclip.copy(ruta_abs)
+    time.sleep(0.3)
+    pyautogui.hotkey("ctrl", "v")
+    time.sleep(0.8)
+    pyautogui.press("enter")
+    time.sleep(4)  # esperar preview del documento en WhatsApp
+
+    pyautogui.press("enter")  # enviar
+    time.sleep(5)  # esperar que termine de subir
+
+
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+
+
+def validar_email(email):
+    """Devuelve (ok: bool, motivo: str). Email vacío también es inválido."""
+    if not email or not email.strip():
+        return False, "vacío"
+    if not _EMAIL_RE.match(email.strip()):
+        return False, f"formato inválido: {email}"
+    return True, ""
+
+
+def validar_celular(celular):
+    """
+    Devuelve (ok: bool, motivo: str).
+    Acepta solo dígitos (ignorando +, espacios, guiones).
+    Longitud razonable: 10-13 dígitos.
+    """
+    if not celular or not str(celular).strip():
+        return False, "vacío"
+    limpio = re.sub(r"[+\s\-()]", "", str(celular))
+    if not limpio.isdigit():
+        return False, f"contiene caracteres no numéricos: {celular}"
+    if len(limpio) < 10 or len(limpio) > 13:
+        return False, f"longitud inválida ({len(limpio)} dígitos): {celular}"
+    return True, ""
+
+
+def validar_pdf_asistente(ruta_pdf, asistente):
+    """
+    Verifica que el PDF existe y que su nombre contiene el ID del asistente.
+    Es una salvaguarda contra mezclar PDFs entre asistentes.
+    """
+    if not os.path.exists(ruta_pdf):
+        return False, f"PDF no existe: {ruta_pdf}"
+    nombre_archivo = os.path.basename(ruta_pdf)
+    esperado = f"entrada_{asistente['id']:03d}_"
+    if esperado not in nombre_archivo:
+        return False, f"PDF no corresponde al asistente (esperaba '{esperado}' en '{nombre_archivo}')"
+    return True, ""
+
+
+def preflight_check(asistentes, enviar_email_flag, enviar_wa_flag):
+    """
+    Valida todos los asistentes ANTES de empezar a enviar.
+    Muestra tabla de quiénes pasan, quiénes tienen problemas, y pide confirmación.
+    Devuelve la lista de asistentes válidos a procesar.
+    """
+    print("\n" + "=" * 60)
+    print("  PRE-FLIGHT CHECK — Validando asistentes...")
+    print("=" * 60)
+
+    validos = []
+    invalidos = []
+    ya_enviados = []
+
+    for a in asistentes:
+        # Filtros previos
+        if a.get("estado") == "enviado":
+            ya_enviados.append(a)
+            continue
+        if CONFIG.get("test_email") and a["email"].strip().lower() != CONFIG["test_email"].strip().lower():
+            continue  # ni mostramos los que el test_email filtra
+
+        problemas = []
+        if enviar_email_flag:
+            ok, motivo = validar_email(a["email"])
+            if not ok:
+                problemas.append(f"email {motivo}")
+        if enviar_wa_flag:
+            ok, motivo = validar_celular(a["celular"])
+            if not ok:
+                problemas.append(f"celular {motivo}")
+
+        if problemas:
+            invalidos.append((a, problemas))
+        else:
+            validos.append(a)
+
+    # Resumen
+    print(f"\n  ✅ Válidos a procesar:   {len(validos)}")
+    print(f"  ⏭  Ya enviados (skip):   {len(ya_enviados)}")
+    print(f"  ❌ Inválidos (skip):     {len(invalidos)}")
+
+    if invalidos:
+        print(f"\n  ⚠️  ASISTENTES CON PROBLEMAS (no se les enviará nada):")
+        for a, probs in invalidos:
+            print(f"     - {a['nombre']} (fila {a['row_num']}): {'; '.join(probs)}")
+
+    if validos:
+        print(f"\n  📋 Se enviará a:")
+        for a in validos[:20]:  # primeros 20 para no llenar pantalla
+            partes = []
+            if enviar_email_flag: partes.append(f"📧 {a['email']}")
+            if enviar_wa_flag:    partes.append(f"📱 {a['celular']}")
+            print(f"     - {a['nombre']:30s}  {'  '.join(partes)}")
+        if len(validos) > 20:
+            print(f"     ... y {len(validos) - 20} más")
+
+    if not validos:
+        print("\n  ❌ No hay asistentes válidos para procesar. Abortando.")
+        return []
+
+    print("\n" + "=" * 60)
+    resp = input(f"¿Confirmás enviar a {len(validos)} asistente(s)? (escribí SI para continuar): ").strip()
+    if resp.upper() != "SI":
+        print("  ❌ Cancelado por el usuario.")
+        return []
+
+    return validos
+
+
+def _localizar_columna_estado(ws):
+    """Devuelve el indice 1-based de la columna 'estado'. La crea si no existe."""
+    headers = [str(cell.value).strip().lower() if cell.value else "" for cell in ws[1]]
+    for i, h in enumerate(headers, 1):
+        if "estado" in h:
+            return i
+    nueva = len(headers) + 1
+    ws.cell(row=1, column=nueva, value="estado")
+    return nueva
+
+
+def _marcar_enviado(wb, ws, estado_col, row_num, ruta_excel):
+    """Marca una fila como 'enviado' y guarda el Excel."""
+    ws.cell(row=row_num, column=estado_col, value="enviado")
+    wb.save(ruta_excel)
+
+
+def procesar_asistentes(solo_email=True, abrir_whatsapp=False, enviar_wa_auto=False):
     """
     Procesa todos los asistentes del Excel.
-    solo_email=True  → envía emails automáticamente
-    abrir_whatsapp=True → abre los links de WA en el navegador (uno por uno)
+    solo_email=True     → envía emails automáticamente
+    abrir_whatsapp=True → abre los links de WA en el navegador (uno por uno, manual)
+    enviar_wa_auto=True → envía WhatsApp + PDF automáticamente con pywhatkit
+
+    Saltea automaticamente a los asistentes cuya columna 'estado' diga 'enviado'.
+    Tras un envio exitoso, marca la fila como 'enviado' en el Excel.
     """
     crear_carpeta_salida()
     asistentes = leer_excel()
+
+    # Pre-flight check: valida emails, celulares y pide confirmación.
+    validos = preflight_check(
+        asistentes,
+        enviar_email_flag=solo_email,
+        enviar_wa_flag=enviar_wa_auto or abrir_whatsapp,
+    )
+    if not validos:
+        return
+    validos_ids = {a["id"] for a in validos}
+
+    # Abrir el Excel para actualizar el estado tras cada envio exitoso
+    ruta_excel = CONFIG["archivo_excel"]
+    wb = openpyxl.load_workbook(ruta_excel)
+    ws = wb.active
+    estado_col = _localizar_columna_estado(ws)
 
     # Guardar links de WhatsApp en un archivo para usar después
     links_wa_path = os.path.join(CONFIG["carpeta_salida"], "links_whatsapp.txt")
 
     errores = []
+    enviados = 0
+    salteados_enviado = 0
 
     with open(links_wa_path, "w", encoding="utf-8") as f_wa:
         f_wa.write(f"LINKS DE WHATSAPP — {CONFIG['nombre_evento']}\n")
         f_wa.write("=" * 60 + "\n\n")
 
         for i, asistente in enumerate(asistentes, 1):
-            if CONFIG.get("test_email"):
-                if asistente["email"].strip().lower() != CONFIG["test_email"].strip().lower():
-                    print(f"  ⏭ Omitiendo {asistente['nombre']} ({asistente['email']}) porque test_email está activo.")
-                    continue
+            # Saltear los que ya estan marcados como enviados
+            if asistente.get("estado") == "enviado":
+                print(f"  ⏭ {asistente['nombre']} ya fue enviado, salteando.")
+                salteados_enviado += 1
+                continue
+
+            # Saltear los que no pasaron el pre-flight check
+            if asistente["id"] not in validos_ids:
+                continue
+
             print(f"\n[{i}/{len(asistentes)}] Procesando: {asistente['nombre']}...")
 
             try:
@@ -548,19 +793,34 @@ def procesar_asistentes(solo_email=True, abrir_whatsapp=False):
                 ruta_pdf = generar_entrada_pdf(asistente)
                 print(f"  ✅ PDF guardado: {ruta_pdf}")
 
+                # 1.5 Validar que el PDF generado corresponde a este asistente
+                ok_pdf, motivo_pdf = validar_pdf_asistente(ruta_pdf, asistente)
+                if not ok_pdf:
+                    print(f"  ❌ {motivo_pdf} — abortando este asistente")
+                    errores.append(f"{asistente['nombre']}: {motivo_pdf}")
+                    continue
+
                 # 2. Enviar email
+                email_ok = False
                 if asistente["email"] and "@" in asistente["email"]:
                     try:
                         print(f"  📧 Enviando email a {asistente['email']}...")
                         enviar_email(asistente, ruta_pdf)
                         print(f"  ✅ Email enviado")
+                        email_ok = True
                     except Exception as e:
                         print(f"  ⚠️  Error email: {e}")
                         errores.append(f"{asistente['nombre']}: email falló — {e}")
                 else:
                     print(f"  ⚠️  Sin email válido, omitiendo envío")
 
-                # 3. Generar link WhatsApp
+                # 3. Marcar como enviado en el Excel (solo si el email salio bien)
+                if email_ok:
+                    _marcar_enviado(wb, ws, estado_col, asistente["row_num"], ruta_excel)
+                    enviados += 1
+                    print(f"  📝 Estado actualizado a 'enviado' en el Excel")
+
+                # 4. Generar link WhatsApp
                 link_wa = generar_link_whatsapp(asistente, ruta_pdf)
                 f_wa.write(f"#{asistente['id']:03d} — {asistente['nombre']}\n")
                 f_wa.write(f"  Celular: {asistente['celular']}\n")
@@ -570,12 +830,24 @@ def procesar_asistentes(solo_email=True, abrir_whatsapp=False):
                     input(f"  Presioná ENTER para abrir WhatsApp de {asistente['nombre'].split()[0]}...")
                     webbrowser.open(link_wa)
 
+                # 5. Enviar WhatsApp + PDF automáticamente (pywhatkit + pyautogui)
+                if enviar_wa_auto and asistente["celular"]:
+                    try:
+                        print(f"  📱 Enviando WhatsApp a {asistente['celular']}...")
+                        enviar_whatsapp_auto(asistente, ruta_pdf, adjuntar_pdf=True)
+                        print(f"  ✅ WhatsApp enviado")
+                    except Exception as e:
+                        print(f"  ⚠️  Error WhatsApp: {e}")
+                        errores.append(f"{asistente['nombre']}: WhatsApp falló — {e}")
+
             except Exception as e:
                 print(f"  ❌ Error general: {e}")
                 errores.append(f"{asistente['nombre']}: {e}")
 
     print("\n" + "="*50)
     print(f"✅ Proceso completado.")
+    print(f"   Enviados nuevos: {enviados}")
+    print(f"   Salteados (ya enviados): {salteados_enviado}")
     print(f"📁 Entradas guardadas en: {CONFIG['carpeta_salida']}/")
     print(f"📱 Links de WhatsApp guardados en: {links_wa_path}")
     if errores:
@@ -594,10 +866,15 @@ if __name__ == "__main__":
     print()
     print("¿Qué querés hacer?")
     print("  1. Generar PDFs + Enviar emails (sin WhatsApp)")
-    print("  2. Generar PDFs + Enviar emails + Abrir WhatsApp uno por uno")
+    print("  2. Generar PDFs + Enviar emails + Abrir WhatsApp uno por uno (manual)")
     print("  3. Solo generar PDFs (sin enviar nada)")
+    print("  4. Generar PDFs + Enviar emails + Enviar WhatsApp AUTOMÁTICO (con PDF)")
+    print("  5. Generar PDFs + Solo enviar WhatsApp AUTOMÁTICO (sin email)")
     print()
-    opcion = input("Opción (1/2/3): ").strip()
+    print("  ⚠️  Para 4 y 5: dejá WhatsApp Web abierto y logueado en el navegador,")
+    print("      y no muevas el mouse/teclado mientras corre.")
+    print()
+    opcion = input("Opción (1/2/3/4/5): ").strip()
 
     if opcion == "1":
         procesar_asistentes(solo_email=True, abrir_whatsapp=False)
@@ -605,5 +882,9 @@ if __name__ == "__main__":
         procesar_asistentes(solo_email=True, abrir_whatsapp=True)
     elif opcion == "3":
         procesar_asistentes(solo_email=False, abrir_whatsapp=False)
+    elif opcion == "4":
+        procesar_asistentes(solo_email=True, abrir_whatsapp=False, enviar_wa_auto=True)
+    elif opcion == "5":
+        procesar_asistentes(solo_email=False, abrir_whatsapp=False, enviar_wa_auto=True)
     else:
         print("Opción no válida. Ejecutá de nuevo.")
