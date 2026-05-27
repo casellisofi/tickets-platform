@@ -37,7 +37,7 @@ import openpyxl
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage, KeepTogether
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.pdfbase import pdfmetrics
@@ -77,10 +77,10 @@ CONFIG = {
     "nombre_evento": "CONFERENCIA VOZ QUE CLAMA 2026",
     "evento_lema": "LA META ES ÉL",
     "fecha_evento":  "Viernes 23 y Sábado 24 de Octubre",
-    "lugar_evento":  "Salón de Conferencias \"Yapire\" - Corrientes, Argentina",
+    "lugar_evento":  "Av. Raúl Alfonsín 3701, W3402 Corrientes",
 
     # Logo del evento (ruta a imagen PNG/JPG, o None para no usar logo)
-    "logo_path": "assets/logo.jpeg",
+    "logo_path": "assets/logoportada.jpeg",
     # Logo de portada (parte superior de la entrada)
     "logo_portada_path": "assets/logoportada.png",
 
@@ -92,7 +92,7 @@ CONFIG = {
 
     # En modo de prueba, solo procesar este email.
     # Si está en None, se procesa todo el Excel.
-    "test_email": "josiascorrea605@gmail.com",
+    "test_email": None,
 
     # Número WhatsApp del organizador (con código de país, sin + ni espacios)
     # Se usa para el link de contacto en la entrada, NO para el envío
@@ -196,7 +196,7 @@ def generar_imagen_qr(datos_qr):
 
 def generar_entrada_pdf(asistente):
     """Genera el PDF de la entrada y lo guarda. Retorna la ruta del archivo."""
-    nombre_archivo = f"entrada_{asistente['id']:03d}_{asistente['nombre'].replace(' ', '_')}.pdf"
+    nombre_archivo = f"Entrada_{'_'.join(asistente['nombre'].split())}.pdf"
     ruta_pdf = os.path.join(CONFIG["carpeta_salida"], nombre_archivo)
 
     datos_qr = generar_datos_qr(asistente)
@@ -387,14 +387,61 @@ def generar_entrada_pdf(asistente):
 
     qr_img = RLImage(qr_tmp_path, width=QR_W, height=QR_W)
 
-    foot_content = Table([
+    sponsor_paths = [
+        "assets/mision.png",
+        "assets/vqc.jpg",
+        "assets/tomatulugar.png",
+    ]
+    # Altura uniforme; el ancho se calcula respetando el aspect ratio de cada logo
+    LOGO_H = 1.1*cm
+    sponsor_logos = []
+    for path in sponsor_paths:
+        if path and os.path.exists(path):
+            with Image.open(path) as im:
+                ratio = im.width / im.height
+            sponsor_logos.append(RLImage(path, width=LOGO_H * ratio, height=LOGO_H))
+
+    sponsor_table = None
+    sponsor_divider = None
+    if sponsor_logos:
+        cols = len(sponsor_logos)
+        sponsor_table = Table([sponsor_logos], colWidths=[(W - 2*FPAD) / cols] * cols, hAlign="CENTER")
+        sponsor_table.setStyle(TableStyle([
+            ("ALIGN", (0,0), (-1,-1), "CENTER"),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("LEFTPADDING", (0,0), (-1,-1), 6),
+            ("RIGHTPADDING", (0,0), (-1,-1), 6),
+            ("TOPPADDING", (0,0), (-1,-1), 2),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+        ]))
+        sponsor_divider = Table([['']], colWidths=[W - 2*FPAD], rowHeights=[1])
+        sponsor_divider.setStyle(TableStyle([
+            ("LINEABOVE", (0,0), (-1,-1), 0.5, C_BRDR),
+            ("LEFTPADDING", (0,0), (-1,-1), 0),
+            ("RIGHTPADDING", (0,0), (-1,-1), 0),
+            ("TOPPADDING", (0,0), (-1,-1), 0),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+        ]))
+
+    foot_rows = [
         [qr_img],
         [Spacer(1, 10)],
         [Paragraph("TU ENTRADA DIGITAL", s_ftit_c)],
         [Paragraph("Mostrá este código QR a la entrada.<br/>No hace falta imprimir.", s_fnote_c)],
-        [Spacer(1, 4)],
+    ]
+    foot_rows += [
+        [Spacer(1, 8)],
         [Paragraph("* PERSONAL E INTRANSFERIBLE", s_pill_c)],
-    ], colWidths=[W - 2*FPAD])
+    ]
+    if sponsor_table:
+        foot_rows += [
+            [Spacer(1, 12)],
+            [sponsor_divider],
+            [Spacer(1, 10)],
+            [sponsor_table],
+        ]
+
+    foot_content = Table(foot_rows, colWidths=[W - 2*FPAD])
     foot_content.setStyle(TableStyle([
         ("ALIGN",         (0,0), (-1,-1), "CENTER"),
         ("TOPPADDING",    (0,0), (-1,-1), 0),
@@ -415,13 +462,12 @@ def generar_entrada_pdf(asistente):
 
     story = [
         hdr,
-        Spacer(1, 14),
+        Spacer(1, 10),
         att_box,
-        Spacer(1, 0.3*cm),
+        Spacer(1, 0.2*cm),
         grid,
-        Spacer(1, 14),
-        sep,
-        foot_tbl,
+        Spacer(1, 8),
+        KeepTogether([sep, foot_tbl]),
     ]
 
     doc.build(story)
@@ -477,13 +523,18 @@ def enviar_email(asistente, ruta_pdf):
                 <td style="padding: 6px 0; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: #a89e8e; text-transform: uppercase;">Fecha</td>
                 <td style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #0f172a;">{CONFIG['fecha_evento']}</td>
               </tr>
+              <tr style="border-top: 1px solid #ede8e0;">
+                <td style="padding: 6px 0; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: #a89e8e; text-transform: uppercase;">Dirección</td>
+                <td style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #0f172a;">{CONFIG['lugar_evento']}</td>
+              </tr>
             </table>
           </div>
 
           <p style="margin: 0 0 8px; font-size: 14px; color: #555;">Encontrás tu entrada en PDF adjunta a este correo. Presentá el código QR a la entrada del evento — no hace falta imprimir.</p>
 
-          <p style="margin: 0 0 24px; font-size: 14px; color: #555;">¡Te esperamos en la Conferencia Voz Que Clama 2026!</p>
 
+          <p style="margin: 0 0 24px; font-size: 14px; color: #555;">¡Te esperamos en la Conferencia VOZ QUE CLAMA 2026! </p>
+                    <p style="margin: 0 0 24px; font-size: 14px; color: #555;">Junto a nuestros amigos Ministeriales de TOMA TU LUGAR y MISION.</p>
           <a href="{CONFIG.get('maps_url','')}" style="display: inline-block; text-decoration: none; background: #050a14; color: #c9a84c; padding: 12px 22px; border-radius: 8px; font-weight: 700; font-size: 13px; letter-spacing: 0.08em;">VER EN GOOGLE MAPS</a>
 
           <p style="margin: 24px 0 0; color: #aaa; font-size: 12px; border-top: 1px solid #ede8e0; padding-top: 16px;">Esta entrada es personal e intransferible.</p>
@@ -529,7 +580,6 @@ def generar_link_whatsapp(asistente, ruta_pdf):
         f"¡Hola {asistente['nombre'].split()[0]}! 👋\n"
         f"Te enviamos tu entrada para *{CONFIG['nombre_evento']}*.\n\n"
         f"📅 *Fecha:* {CONFIG['fecha_evento']}\n"
-        f"📍 *Lugar:* {CONFIG['lugar_evento']}\n"
         f"¡Te esperamos! 🎉"
     )
     link = f"https://wa.me/{numero}?text={urllib.parse.quote(mensaje)}"
@@ -562,8 +612,7 @@ def enviar_whatsapp_auto(asistente, ruta_pdf, adjuntar_pdf=True):
     mensaje = (
         f"¡Hola {asistente['nombre'].split()[0]}! 👋\n"
         f"Te enviamos tu entrada para *{CONFIG['nombre_evento']}*.\n\n"
-        f"📅 *Fecha:* {CONFIG['fecha_evento']}\n"
-        f"📍 *Lugar:* {CONFIG['lugar_evento']}\n\n"
+        f"📅 *Fecha:* {CONFIG['fecha_evento']}\n\n"
         f"También te llegó por email tu entrada. No la pierdas. ¡Te esperamos! 🎉"
     )
 
@@ -635,14 +684,14 @@ def validar_celular(celular):
 
 def validar_pdf_asistente(ruta_pdf, asistente):
     """
-    Verifica que el PDF existe y que su nombre contiene el ID del asistente.
+    Verifica que el PDF existe y que su nombre contiene el nombre del asistente.
     Es una salvaguarda contra mezclar PDFs entre asistentes.
     """
     if not os.path.exists(ruta_pdf):
         return False, f"PDF no existe: {ruta_pdf}"
     nombre_archivo = os.path.basename(ruta_pdf)
-    esperado = f"entrada_{asistente['id']:03d}_"
-    if esperado not in nombre_archivo:
+    esperado = f"Entrada_{'_'.join(asistente['nombre'].split())}.pdf"
+    if nombre_archivo != esperado:
         return False, f"PDF no corresponde al asistente (esperaba '{esperado}' en '{nombre_archivo}')"
     return True, ""
 
@@ -660,6 +709,7 @@ def preflight_check(asistentes, enviar_email_flag, enviar_wa_flag):
     validos = []
     invalidos = []
     ya_enviados = []
+    filtrados_test_email = []
 
     for a in asistentes:
         # Filtros previos
@@ -667,6 +717,7 @@ def preflight_check(asistentes, enviar_email_flag, enviar_wa_flag):
             ya_enviados.append(a)
             continue
         if CONFIG.get("test_email") and a["email"].strip().lower() != CONFIG["test_email"].strip().lower():
+            filtrados_test_email.append(a)
             continue  # ni mostramos los que el test_email filtra
 
         problemas = []
@@ -687,6 +738,8 @@ def preflight_check(asistentes, enviar_email_flag, enviar_wa_flag):
     # Resumen
     print(f"\n  ✅ Válidos a procesar:   {len(validos)}")
     print(f"  ⏭  Ya enviados (skip):   {len(ya_enviados)}")
+    if filtrados_test_email:
+        print(f"  🔎 Filtrados por test_email: {len(filtrados_test_email)}")
     print(f"  ❌ Inválidos (skip):     {len(invalidos)}")
 
     if invalidos:
@@ -706,14 +759,12 @@ def preflight_check(asistentes, enviar_email_flag, enviar_wa_flag):
 
     if not validos:
         print("\n  ❌ No hay asistentes válidos para procesar. Abortando.")
+        if CONFIG.get("test_email") and filtrados_test_email:
+            print(f"     Nota: se está usando test_email={CONFIG['test_email']}, que filtra otros asistentes.")
         return []
 
     print("\n" + "=" * 60)
-    resp = input(f"¿Confirmás enviar a {len(validos)} asistente(s)? (escribí SI para continuar): ").strip()
-    if resp.upper() != "SI":
-        print("  ❌ Cancelado por el usuario.")
-        return []
-
+    print(f"  ✅ Procediendo con {len(validos)} asistente(s) sin confirmación manual.")
     return validos
 
 
