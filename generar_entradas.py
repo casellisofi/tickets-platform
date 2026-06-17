@@ -578,7 +578,7 @@ def generar_link_whatsapp(asistente, ruta_pdf):
 
     mensaje = (
         f"¡Hola {asistente['nombre'].split()[0]}! 👋\n"
-        f"Te enviamos tu entrada para *{CONFIG['nombre_evento']}*.\n\n"
+        f"Te enviamos tu entrada para la *{CONFIG['nombre_evento']}*.\n\n"
         f"📅 *Fecha:* {CONFIG['fecha_evento']}\n"
         f"¡Te esperamos! 🎉"
     )
@@ -611,7 +611,7 @@ def enviar_whatsapp_auto(asistente, ruta_pdf, adjuntar_pdf=True):
 
     mensaje = (
         f"¡Hola {asistente['nombre'].split()[0]}! 👋\n"
-        f"Te enviamos tu entrada para *{CONFIG['nombre_evento']}*.\n\n"
+        f"Te enviamos tu entrada para la *{CONFIG['nombre_evento']}*.\n\n"
         f"📅 *Fecha:* {CONFIG['fecha_evento']}\n\n"
         f"También te llegó por email tu entrada. No la pierdas. ¡Te esperamos! 🎉"
     )

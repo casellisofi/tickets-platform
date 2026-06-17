@@ -25,8 +25,13 @@
         <div class="video-card">
           <video id="video" playsinline autoplay muted></video>
           <div id="video-overlay">Esperando QR...</div>
+          <div id="result-flash" class="result-flash hidden">
+            <div id="result-flash-icon" class="result-flash-icon"></div>
+            <div id="result-flash-text" class="result-flash-text"></div>
+          </div>
         </div>
         <button id="start-camera" class="button">Iniciar cámara</button>
+        <button id="stop-camera" class="button button-secondary hidden" type="button">Detener cámara</button>
         <div id="camera-warning" class="alert alert-warning hidden">
           Este navegador o dispositivo no puede acceder a la cámara.
           Usá el botón de abajo o copiá el texto manualmente.
@@ -57,6 +62,10 @@
           <h2>Asistentes presentes</h2>
           <button id="refresh-button" class="button button-secondary" type="button">Actualizar</button>
         </div>
+        <div id="stats-counter" class="stats-counter">
+          <span id="stats-present">0</span> presentes
+          <span id="stats-total-wrap" class="hidden"> / <span id="stats-total">0</span> en la lista</span>
+        </div>
         <div id="checkin-list" class="checkin-list"></div>
       </div>
     </section>
@@ -65,6 +74,7 @@
   <script>
     const EVENT_NAME = "{{ evento | escape }}";
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
