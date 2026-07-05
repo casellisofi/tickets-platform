@@ -387,32 +387,22 @@ def generar_entrada_pdf(asistente):
 
     qr_img = RLImage(qr_tmp_path, width=QR_W, height=QR_W)
 
-    sponsor_paths = [
-        "assets/mision.png",
-        "assets/vqc.jpg",
-        "assets/tomatulugar.png",
-    ]
-    # Altura uniforme; el ancho se calcula respetando el aspect ratio de cada logo
-    LOGO_H = 1.1*cm
-    sponsor_logos = []
-    for path in sponsor_paths:
-        if path and os.path.exists(path):
-            with Image.open(path) as im:
-                ratio = im.width / im.height
-            sponsor_logos.append(RLImage(path, width=LOGO_H * ratio, height=LOGO_H))
+    footer_logos_path = "assets/footer_logos2.png"
 
     sponsor_table = None
     sponsor_divider = None
-    if sponsor_logos:
-        cols = len(sponsor_logos)
-        sponsor_table = Table([sponsor_logos], colWidths=[(W - 2*FPAD) / cols] * cols, hAlign="CENTER")
+    if os.path.exists(footer_logos_path):
+        with Image.open(footer_logos_path) as im:
+            ratio = im.width / im.height
+        footer_img = RLImage(footer_logos_path, width=(W - 2*FPAD), height=(W - 2*FPAD) / ratio)
+        sponsor_table = Table([[footer_img]], colWidths=[W - 2*FPAD])
         sponsor_table.setStyle(TableStyle([
             ("ALIGN", (0,0), (-1,-1), "CENTER"),
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ("LEFTPADDING", (0,0), (-1,-1), 6),
-            ("RIGHTPADDING", (0,0), (-1,-1), 6),
-            ("TOPPADDING", (0,0), (-1,-1), 2),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ("LEFTPADDING", (0,0), (-1,-1), 0),
+            ("RIGHTPADDING", (0,0), (-1,-1), 0),
+            ("TOPPADDING", (0,0), (-1,-1), 0),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 0),
         ]))
         sponsor_divider = Table([['']], colWidths=[W - 2*FPAD], rowHeights=[1])
         sponsor_divider.setStyle(TableStyle([
