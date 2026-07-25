@@ -711,16 +711,21 @@ def preflight_check(asistentes, enviar_email_flag, enviar_wa_flag):
             continue  # ni mostramos los que el test_email filtra
 
         problemas = []
+        email_ok = True
+        celular_ok = True
         if enviar_email_flag:
-            ok, motivo = validar_email(a["email"])
-            if not ok:
+            email_ok, motivo = validar_email(a["email"])
+            if not email_ok:
                 problemas.append(f"email {motivo}")
         if enviar_wa_flag:
-            ok, motivo = validar_celular(a["celular"])
-            if not ok:
+            celular_ok, motivo = validar_celular(a["celular"])
+            if not celular_ok:
                 problemas.append(f"celular {motivo}")
 
-        if problemas:
+        # Alcanza con que un canal sea válido (ej: sin email pero con WhatsApp OK).
+        tiene_canal_valido = (enviar_email_flag and email_ok) or (enviar_wa_flag and celular_ok)
+
+        if not tiene_canal_valido:
             invalidos.append((a, problemas))
         else:
             validos.append(a)
@@ -855,12 +860,6 @@ def procesar_asistentes(solo_email=True, abrir_whatsapp=False, enviar_wa_auto=Fa
                 else:
                     print(f"  ⚠️  Sin email válido, omitiendo envío")
 
-                # 3. Marcar como enviado en el Excel (solo si el email salio bien)
-                if email_ok:
-                    _marcar_enviado(wb, ws, estado_col, asistente["row_num"], ruta_excel)
-                    enviados += 1
-                    print(f"  📝 Estado actualizado a 'enviado' en el Excel")
-
                 # 4. Generar link WhatsApp
                 link_wa = generar_link_whatsapp(asistente, ruta_pdf)
                 f_wa.write(f"#{asistente['id']:03d} — {asistente['nombre']}\n")
@@ -872,14 +871,22 @@ def procesar_asistentes(solo_email=True, abrir_whatsapp=False, enviar_wa_auto=Fa
                     webbrowser.open(link_wa)
 
                 # 5. Enviar WhatsApp + PDF automáticamente (pywhatkit + pyautogui)
+                wa_ok = False
                 if enviar_wa_auto and asistente["celular"]:
                     try:
                         print(f"  📱 Enviando WhatsApp a {asistente['celular']}...")
                         enviar_whatsapp_auto(asistente, ruta_pdf, adjuntar_pdf=True)
                         print(f"  ✅ WhatsApp enviado")
+                        wa_ok = True
                     except Exception as e:
                         print(f"  ⚠️  Error WhatsApp: {e}")
                         errores.append(f"{asistente['nombre']}: WhatsApp falló — {e}")
+
+                # 6. Marcar como enviado si al menos un canal funcionó
+                if email_ok or wa_ok:
+                    _marcar_enviado(wb, ws, estado_col, asistente["row_num"], ruta_excel)
+                    enviados += 1
+                    print(f"  📝 Estado actualizado a 'enviado' en el Excel")
 
             except Exception as e:
                 print(f"  ❌ Error general: {e}")

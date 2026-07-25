@@ -18,7 +18,7 @@ env/
 .env
 
 # Datos de ejecución (datos personales, generados en runtime)
-data/
+
 checkin.db
 
 # Logs
