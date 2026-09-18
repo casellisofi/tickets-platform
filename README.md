@@ -76,7 +76,7 @@ CONFIG = {
     "nombre_evento": "CONFERENCIA VOZ QUE CLAMA 2026",
     "evento_lema":   "LA META ES ÉL",
     "fecha_evento":  "Viernes 23 de octubre ...",
-    "lugar_evento":  "Salón de Conferencias Yapire — Corrientes, Argentina",
+    "lugar_evento":  "Salón de Conferencias La Lola — Corrientes, Argentina",
     "logo_path":     "logo.jpeg",
     "gmail_usuario": "tuemail@gmail.com",
     # La contraseña va en el archivo .env como GMAIL_PASSWORD

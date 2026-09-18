@@ -77,7 +77,7 @@ CONFIG = {
     "nombre_evento": "CONFERENCIA VOZ QUE CLAMA 2026",
     "evento_lema": "LA META ES ÉL",
     "fecha_evento":  "Viernes 23 y Sábado 24 de Octubre",
-    "lugar_evento":  "Av. Raúl Alfonsín 3701, W3402 Corrientes",
+    "lugar_evento":  "La Lola Eventos, Cam. al Perichón, W3400 Corrientes",
 
     # Logo del evento (ruta a imagen PNG/JPG, o None para no usar logo)
     "logo_path": "assets/logoportada.jpeg",
@@ -99,7 +99,7 @@ CONFIG = {
     "whatsapp_organizador": "3794046620",
 
     # Link de Google Maps del lugar
-    "maps_url": "https://maps.app.goo.gl/H1apm6XmL8bmH9Hr6",
+    "maps_url": "https://maps.app.goo.gl/WUwHsjwLgBSRBDzN7",
 
     # Archivo Excel con los asistentes
     # Columnas esperadas: nombre_completo | dni | email | celular
@@ -320,8 +320,8 @@ def generar_entrada_pdf(asistente):
     half = (W - CGAP) / 2
 
     lugar_link = (
-        f'<a href="{maps_url}" color="#8a6010"><u>Salón de Conferencias \"Yapire\"</u></a>'
-        if maps_url else 'Salón de Conferencias \"Yapire\"'
+        f'<a href="{maps_url}" color="#8a6010"><u>Salón de Conferencias \"La Lola\"</u></a>'
+        if maps_url else 'La Lola'
     )
     lugar_card = Table([
         [Paragraph("LUGAR", s_lbl)],
