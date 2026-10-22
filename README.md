@@ -158,12 +158,25 @@ SECRET_KEY=una-clave-larga-y-aleatoria
 
 ### Funcionalidades
 
-- Escaneo QR con la cámara del dispositivo (usa `BarcodeDetector` del navegador)
-- Ingreso manual del JSON del QR como fallback
-- Muestra nombre, DNI y número de entrada antes de confirmar
-- Previene doble check-in de la misma entrada
-- Lista de asistentes marcados en tiempo real
-- Registro guardado en `checkin.db` (SQLite local)
+- **Escáner QR con la cámara** (BarcodeDetector nativo o jsQR incluido en `static/`, sin depender de internet para cargar librerías).
+- **Pantalla de resultado tipo semáforo:** verde = ingresó, naranja = ya había ingresado (muestra a qué hora), rojo = entrada no válida / no está en la lista. Con sonido y vibración.
+- **Varios celulares a la vez:** el servidor es la única fuente de verdad (SQLite con `UNIQUE` por entrada). Si dos celulares escanean el mismo QR al mismo tiempo, solo uno registra el ingreso y el otro ve "YA INGRESÓ". Todos los celulares se sincronizan cada 5 segundos.
+- **Pestaña Lista:** todos los asistentes con buscador (nombre, DNI, congregación), filtros Todos / Ingresaron / Faltan, marcar ingreso a mano (para quien perdió el QR) y anular un ingreso hecho por error.
+- Contador de presentes / total con barra de progreso, linterna y cambio de cámara, pantalla siempre encendida mientras se escanea.
+- **Escanear con foto:** alternativa que funciona aun sin HTTPS.
+- Valida el QR contra el Excel (ID + DNI) y muestra el nombre y la congregación que figuran en la lista. Si cambiás el Excel, la app lo recarga sola.
+- Hora de ingreso en horario de Argentina (UTC-3) aunque el servidor esté en UTC.
+
+> **Cámara en vivo = HTTPS.** Los celulares solo permiten la cámara en páginas HTTPS (o `localhost`).
+> Con `http://<IP>:5000` en la red local la cámara en vivo NO funciona; ahí se usa «Escanear con foto» o la Lista.
+> Para el evento usá el deploy en PythonAnywhere (HTTPS), ver `docs/DEPLOY_PYTHONANYWHERE.md`.
+
+### Antes del evento
+
+1. Cambiá `CHECKIN_PASSWORD` y `SECRET_KEY` en `.env` (por defecto son inseguros).
+2. Subí el `asistentes.xlsx` definitivo y **no reordenes filas** después de generar las entradas: el ID del QR es la fila.
+3. Borrá `checkin.db` si hiciste pruebas, para arrancar con cero ingresos.
+4. Probá con 2 celulares el mismo QR a la vez.
 
 ---
 
@@ -175,4 +188,4 @@ SECRET_KEY=una-clave-larga-y-aleatoria
 | `ModuleNotFoundError` | Ejecutar `pip install -r requirements.txt` |
 | QR no se escanea | Verificar que reportlab esté instalado y el PDF no esté corrupto |
 | Número WhatsApp inválido | El celular debe tener 10 dígitos locales (ej: `3794123456`) |
-| Cámara no disponible | Usar el ingreso manual de JSON en la app de check-in |
+| Cámara no disponible | Abrir la app por HTTPS (PythonAnywhere); mientras tanto usar «Escanear con foto» o la pestaña Lista |

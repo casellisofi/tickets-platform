@@ -2,24 +2,26 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login - Check-in</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1b33">
+  <title>Ingreso — Check-in</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body>
+<body class="login-body">
   <main class="login-page">
     <div class="login-card">
-      <h1>Entradas Conferencia VQC</h1>
-      <p>Accedé con usuario y contraseña para usar el sistema de entrada.</p>
+      <div class="login-badge">QR</div>
+      <h1>Check-in de entradas</h1>
+      <p class="login-sub">{{ evento }}</p>
       {% if error %}
-        <div class="alert alert-error">{{ error }}</div>
+        <div class="alert alert-error" role="alert">{{ error }}</div>
       {% endif %}
       <form method="post" action="{{ url_for('login') }}">
         <label for="username">Usuario</label>
-        <input id="username" name="username" type="text" autocomplete="username" required>
+        <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" required>
         <label for="password">Contraseña</label>
         <input id="password" name="password" type="password" autocomplete="current-password" required>
-        <button type="submit">Ingresar</button>
+        <button type="submit" class="btn btn-primary btn-block">Ingresar</button>
       </form>
     </div>
   </main>

@@ -1,7 +1,8 @@
+import hmac
 import json
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import Flask, g, jsonify, redirect, render_template, request, session, url_for
 
@@ -27,14 +28,29 @@ USERNAME = os.environ.get("CHECKIN_USERNAME", "admin")
 PASSWORD = os.environ.get("CHECKIN_PASSWORD", "evento123")
 EVENT_NAME = os.environ.get("CHECKIN_EVENT_LABEL", "CONFERENCIA VOZ QUE CLAMA 2026")
 
+# Argentina no tiene horario de verano; UTC-3 fijo evita depender de tzdata
+# y muestra la hora correcta aunque el servidor (PythonAnywhere) esté en UTC.
+LOCAL_TZ = timezone(timedelta(hours=-3))
+
 app = Flask(__name__, template_folder="templates", static_folder="static")
-app.config["SECRET_KEY"] = SECRET_KEY
+app.config.update(
+    SECRET_KEY=SECRET_KEY,
+    PERMANENT_SESSION_LIFETIME=timedelta(days=2),  # el staff no debe desloguearse en pleno evento
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
 
 
+def now_local():
+    return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+
+# ------------------------------------------------------------------ DB
 def get_db():
     db = getattr(g, "db", None)
     if db is None:
-        db = sqlite3.connect(DATABASE)
+        # timeout: con varios celulares escribiendo a la vez, esperar el lock en vez de fallar.
+        db = sqlite3.connect(DATABASE, timeout=15)
         db.row_factory = sqlite3.Row
         g.db = db
     return db
@@ -48,7 +64,7 @@ def close_db(exception=None):
 
 
 def init_db():
-    db = sqlite3.connect(DATABASE)
+    db = sqlite3.connect(DATABASE, timeout=15)
     db.execute("PRAGMA journal_mode=WAL")
     db.execute(
         """
@@ -67,11 +83,17 @@ def init_db():
     db.close()
 
 
-_attendees_cache = {"by_id": {}, "by_dni": {}, "mtime": None}
+# ----------------------------------------------------------- Asistentes
+_attendees_cache = {"by_id": {}, "mtime": None}
+
+
+def _norm_dni(value):
+    return "".join(ch for ch in str(value or "") if ch.isdigit())
 
 
 def load_attendees():
-    """Carga asistentes desde el Excel. Cachea por mtime — si el archivo cambia, recarga."""
+    """Carga asistentes desde el Excel. Cachea por mtime — si el archivo cambia, recarga.
+    Si el Excel está bloqueado/a medio guardar, se sigue usando la última copia buena."""
     if openpyxl is None or not os.path.exists(ATTENDEES_XLSX):
         return _attendees_cache
 
@@ -83,123 +105,93 @@ def load_attendees():
     if _attendees_cache["mtime"] == mtime and _attendees_cache["by_id"]:
         return _attendees_cache
 
-    wb = openpyxl.load_workbook(ATTENDEES_XLSX, read_only=True, data_only=True)
-    ws = wb.active
+    try:
+        wb = openpyxl.load_workbook(ATTENDEES_XLSX, read_only=True, data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        wb.close()
+    except Exception:
+        return _attendees_cache
 
-    headers = [str(cell.value).strip().lower() if cell.value else "" for cell in ws[1]]
+    if not rows:
+        return _attendees_cache
+
+    headers = [str(c).strip().lower() if c else "" for c in rows[0]]
     col_map = {}
     for i, h in enumerate(headers):
         if "nombre" in h or "name" in h:
             col_map.setdefault("nombre", i)
         elif "dni" in h or "documento" in h:
             col_map.setdefault("dni", i)
+        elif "congreg" in h or "iglesia" in h:
+            col_map.setdefault("congregacion", i)
+
+    def cell(row, key, default_idx=None):
+        idx = col_map.get(key, default_idx)
+        if idx is None or idx >= len(row):
+            return ""
+        return str(row[idx] or "").strip()
 
     by_id = {}
-    by_dni = {}
-    for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+    for row_num, row in enumerate(rows[1:], start=2):
         if not row or not any(row):
             continue
-        nombre = str(row[col_map.get("nombre", 0)] or "").strip()
-        dni = str(row[col_map.get("dni", 1)] or "").strip()
+        nombre = cell(row, "nombre", 0)
         if not nombre:
             continue
-        attendee_id = row_num - 1
-        entry = {"id": attendee_id, "nombre": nombre, "dni": dni}
-        by_id[attendee_id] = entry
-        if dni:
-            by_dni[dni] = entry
-
-    wb.close()
+        attendee_id = row_num - 1  # mismo criterio que generar_entradas.py
+        by_id[attendee_id] = {
+            "id": attendee_id,
+            "nombre": nombre,
+            "dni": cell(row, "dni", 1),
+            "congregacion": cell(row, "congregacion"),
+        }
 
     _attendees_cache["by_id"] = by_id
-    _attendees_cache["by_dni"] = by_dni
     _attendees_cache["mtime"] = mtime
     return _attendees_cache
 
 
+# ----------------------------------------------------------------- Auth
 def login_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
         if not session.get("logged_in"):
+            if request.path.startswith("/api/"):
+                return jsonify({"success": False, "status": "auth", "message": "Sesión vencida. Volvé a ingresar."}), 401
             return redirect(url_for("login"))
         return view(*args, **kwargs)
 
     return wrapped_view
 
 
-def validate_payload(payload):
-    """Verifica formato del QR. Devuelve (ok, message)."""
-    if not isinstance(payload, dict):
-        return False, "El QR no contiene un objeto válido."
-
-    for field in ("id", "nombre", "dni", "evento"):
-        if field not in payload:
-            return False, f"Falta el campo '{field}' en el QR."
-
-    try:
-        attendee_id = int(payload["id"])
-    except (TypeError, ValueError):
-        return False, "El id del QR no es válido."
-
-    if attendee_id <= 0:
-        return False, "El id del QR no es válido."
-
-    if not str(payload["nombre"]).strip() or not str(payload["dni"]).strip():
-        return False, "El QR no tiene nombre o DNI."
-
-    return True, ""
-
-
-def verify_against_attendees(payload):
-    """Verifica que el id+dni del QR coincida con la lista de asistentes. Devuelve (ok, message)."""
-    attendees = load_attendees()
-    if not attendees["by_id"]:
-        # Sin lista cargada, no podemos verificar — aceptamos por compatibilidad
-        return True, ""
-
-    attendee_id = int(payload["id"])
-    dni = str(payload["dni"]).strip()
-
-    expected = attendees["by_id"].get(attendee_id)
-    if not expected:
-        return False, f"No existe asistente con entrada #{attendee_id} en la lista."
-
-    if expected["dni"] and expected["dni"] != dni:
-        return False, "El DNI del QR no coincide con el de la lista."
-
-    return True, ""
-
-
+# --------------------------------------------------------------- Check-in
 def get_checkin_by_attendee(attendee_id):
-    db = get_db()
-    row = db.execute(
-        "SELECT * FROM checkins WHERE attendee_id = ?",
-        (attendee_id,),
+    return get_db().execute(
+        "SELECT * FROM checkins WHERE attendee_id = ?", (attendee_id,)
     ).fetchone()
-    return row
 
 
-def save_checkin(payload):
-    attendee_id = int(payload["id"])
+def save_checkin(attendee_id, nombre, dni, evento, raw):
+    """Inserta el ingreso. El UNIQUE(attendee_id) hace la operación atómica:
+    si dos celulares escanean el mismo QR a la vez, solo uno gana."""
     db = get_db()
-    existing = get_checkin_by_attendee(attendee_id)
-    if existing:
-        return False, existing["checkin_time"]
+    now = now_local()
+    try:
+        db.execute(
+            "INSERT INTO checkins (attendee_id, nombre, dni, evento, raw_payload, checkin_time) VALUES (?, ?, ?, ?, ?, ?)",
+            (attendee_id, nombre, dni, evento, json.dumps(raw, ensure_ascii=False), now),
+        )
+        db.commit()
+        return True, now
+    except sqlite3.IntegrityError:
+        db.rollback()
+        existing = get_checkin_by_attendee(attendee_id)
+        return False, existing["checkin_time"] if existing else now
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    db.execute(
-        "INSERT INTO checkins (attendee_id, nombre, dni, evento, raw_payload, checkin_time) VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            attendee_id,
-            str(payload["nombre"]).strip(),
-            str(payload["dni"]).strip(),
-            str(payload["evento"]).strip(),
-            json.dumps(payload, ensure_ascii=False),
-            now,
-        ),
-    )
-    db.commit()
-    return True, now
+
+def fail(status, message, code):
+    return jsonify({"success": False, "status": status, "message": message}), code
 
 
 @app.route("/")
@@ -215,11 +207,16 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
-        if username == USERNAME and password == PASSWORD:
+        ok = hmac.compare_digest(username.encode(), USERNAME.encode()) & hmac.compare_digest(
+            password.encode(), PASSWORD.encode()
+        )
+        if ok:
+            session.clear()
             session["logged_in"] = True
+            session.permanent = True
             return redirect(url_for("checkin"))
         error = "Usuario o contraseña incorrectos."
-    return render_template("login.html", error=error)
+    return render_template("login.html", error=error, evento=EVENT_NAME)
 
 
 @app.route("/logout")
@@ -234,57 +231,133 @@ def checkin():
     return render_template("checkin.html", evento=EVENT_NAME)
 
 
+@app.route("/healthz")
+def healthz():
+    return "ok"
+
+
+@app.route("/api/state")
+@login_required
+def api_state():
+    """Lista completa + quién ya ingresó. Es lo que consultan todos los celulares cada pocos segundos."""
+    attendees = load_attendees()["by_id"]
+    rows = get_db().execute("SELECT attendee_id, nombre, dni, checkin_time FROM checkins").fetchall()
+    checked = {r["attendee_id"]: r for r in rows}
+
+    people = []
+    for a in attendees.values():
+        c = checked.get(a["id"])
+        people.append({
+            "id": a["id"],
+            "nombre": a["nombre"],
+            "dni": a["dni"],
+            "congregacion": a["congregacion"],
+            "ingreso": c["checkin_time"] if c else None,
+        })
+    # Ingresos que no están en la lista (p. ej. el Excel cambió o no hay lista cargada).
+    for aid, c in checked.items():
+        if aid not in attendees:
+            people.append({"id": aid, "nombre": c["nombre"], "dni": c["dni"],
+                           "congregacion": "", "ingreso": c["checkin_time"]})
+
+    people.sort(key=lambda p: p["nombre"].lower())
+    return jsonify({
+        "success": True,
+        "people": people,
+        "presentes": len(checked),
+        "total": len(attendees) or None,
+        "server_time": now_local(),
+    })
+
+
 @app.route("/api/checkins")
 @login_required
 def api_checkins():
-    db = get_db()
-    rows = db.execute(
-        "SELECT attendee_id, nombre, dni, evento, checkin_time FROM checkins ORDER BY checkin_time DESC"
+    """Compatibilidad: solo los presentes, más recientes primero."""
+    rows = get_db().execute(
+        "SELECT attendee_id, nombre, dni, checkin_time FROM checkins ORDER BY checkin_time DESC"
     ).fetchall()
-    checkins = [dict(row) for row in rows]
     attendees = load_attendees()
-    total = len(attendees["by_id"]) if attendees["by_id"] else None
     return jsonify({
         "success": True,
-        "checkins": checkins,
-        "presentes": len(checkins),
-        "total": total,
+        "checkins": [dict(r) for r in rows],
+        "presentes": len(rows),
+        "total": len(attendees["by_id"]) or None,
     })
 
 
 @app.route("/api/checkin", methods=["POST"])
 @login_required
 def api_checkin():
+    """Registra un ingreso.
+    - Desde el QR: {id, nombre, dni, evento} → se valida id + DNI contra la lista.
+    - Manual desde la lista: {id, manual: true} → solo se valida que el id exista."""
     payload = request.get_json(silent=True)
-    if not payload:
-        return jsonify({"success": False, "message": "No se recibió un JSON válido."}), 400
+    if not isinstance(payload, dict):
+        return fail("invalid", "No se recibió un JSON válido.", 400)
 
-    ok, msg = validate_payload(payload)
-    if not ok:
-        return jsonify({"success": False, "message": msg}), 400
+    try:
+        attendee_id = int(payload.get("id"))
+    except (TypeError, ValueError):
+        return fail("invalid", "QR inválido: el número de entrada no es válido.", 400)
+    if attendee_id <= 0:
+        return fail("invalid", "QR inválido: el número de entrada no es válido.", 400)
 
-    ok, msg = verify_against_attendees(payload)
-    if not ok:
-        return jsonify({"success": False, "message": msg}), 404
+    manual = bool(payload.get("manual"))
+    attendees = load_attendees()["by_id"]
+    expected = attendees.get(attendee_id)
 
-    accepted, timestamp = save_checkin(payload)
+    if attendees:
+        if not expected:
+            return fail("invalid", f"La entrada #{attendee_id} no existe en la lista.", 404)
+        if not manual:
+            qr_dni = _norm_dni(payload.get("dni"))
+            if not qr_dni:
+                return fail("invalid", "QR inválido: no trae DNI.", 400)
+            if _norm_dni(expected["dni"]) != qr_dni:
+                return fail("invalid", "El DNI del QR no coincide con el de la lista. Entrada no válida.", 400)
+        nombre, dni, congregacion = expected["nombre"], expected["dni"], expected["congregacion"]
+    else:
+        # Sin lista cargada no se puede verificar: se acepta lo que trae el QR.
+        nombre = str(payload.get("nombre") or "").strip()
+        dni = str(payload.get("dni") or "").strip()
+        congregacion = ""
+        if not nombre or not dni:
+            return fail("invalid", "QR inválido: falta nombre o DNI.", 400)
+
+    evento = str(payload.get("evento") or EVENT_NAME).strip()
+    accepted, when = save_checkin(attendee_id, nombre, dni, evento, payload)
+
+    person = {"id": attendee_id, "nombre": nombre, "dni": dni, "congregacion": congregacion}
     if not accepted:
-        return jsonify(
-            {
-                "success": False,
-                "message": "Esta entrada ya fue marcada como presente.",
-                "duplicate": True,
-                "checkin_time": timestamp,
-            }
-        ), 409
+        return jsonify({
+            "success": False,
+            "status": "duplicate",
+            "duplicate": True,
+            "message": "Esta entrada ya fue usada.",
+            "checkin_time": when,
+            "person": person,
+        }), 409
 
-    return jsonify(
-        {
-            "success": True,
-            "message": "Asistente marcado como presente.",
-            "checkin_time": timestamp,
-        }
-    )
+    return jsonify({
+        "success": True,
+        "status": "ok",
+        "message": "Ingreso registrado.",
+        "checkin_time": when,
+        "person": person,
+    })
+
+
+@app.route("/api/checkin/<int:attendee_id>", methods=["DELETE"])
+@login_required
+def api_undo_checkin(attendee_id):
+    """Anula un ingreso marcado por error."""
+    db = get_db()
+    cur = db.execute("DELETE FROM checkins WHERE attendee_id = ?", (attendee_id,))
+    db.commit()
+    if cur.rowcount == 0:
+        return fail("invalid", "Esa persona no estaba marcada como presente.", 404)
+    return jsonify({"success": True, "status": "undone", "message": "Ingreso anulado."})
 
 
 # Inicializa la DB al importar — necesario bajo WSGI (PythonAnywhere) donde no corre __main__.
@@ -292,4 +365,6 @@ init_db()
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    if PASSWORD == "evento123" or SECRET_KEY == "evento_checkin_2026_secret":
+        print("⚠️  Estás usando la contraseña/clave por defecto. Definí CHECKIN_PASSWORD y SECRET_KEY en .env.")
+    app.run(host="0.0.0.0", port=5000, threaded=True)

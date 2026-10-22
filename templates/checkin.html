@@ -2,79 +2,115 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Check-in del Evento</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1b33">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Check-in — {{ evento }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body>
-  <header class="topbar">
-    <div>
-      <h1>Check-in</h1>
-      <p>Usá la cámara para escanear el QR de la entrada.</p>
+<body class="app-body">
+
+  <header class="app-header">
+    <div class="app-title">
+      <strong>Check-in</strong>
+      <span class="app-event">{{ evento }}</span>
     </div>
-    <div class="topbar-actions">
-      <span class="event-label">Evento: {{ evento }}</span>
-      <a class="button button-secondary" href="{{ url_for('logout') }}">Cerrar sesión</a>
+    <div class="app-stats" aria-live="polite">
+      <span id="conn-dot" class="conn-dot" title="Conexión"></span>
+      <span class="stats-num"><b id="stats-present">0</b><small id="stats-total-wrap"> / <span id="stats-total">–</span></small></span>
+      <a class="icon-link" href="{{ url_for('logout') }}" title="Cerrar sesión" aria-label="Cerrar sesión">Salir</a>
     </div>
+    <div class="progress" aria-hidden="true"><div id="progress-bar"></div></div>
   </header>
 
-  <main class="container">
-    <section class="panel">
-      <div class="panel-card">
-        <h2>Escáner QR</h2>
-        <div class="video-card">
-          <video id="video" playsinline autoplay muted></video>
-          <div id="video-overlay">Esperando QR...</div>
-          <div id="result-flash" class="result-flash hidden">
-            <div id="result-flash-icon" class="result-flash-icon"></div>
-            <div id="result-flash-text" class="result-flash-text"></div>
-          </div>
-        </div>
-        <button id="start-camera" class="button">Iniciar cámara</button>
-        <button id="stop-camera" class="button button-secondary hidden" type="button">Detener cámara</button>
-        <div id="camera-warning" class="alert alert-warning hidden">
-          Este navegador o dispositivo no puede acceder a la cámara.
-          Usá el botón de abajo o copiá el texto manualmente.
+  <main class="app-main">
+
+    <!-- ============ ESCÁNER ============ -->
+    <section id="view-scan" class="view active">
+      <div class="scanner">
+        <video id="video" playsinline muted autoplay></video>
+        <div class="viewfinder" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <div id="scan-hint" class="scan-hint">Apuntá al QR de la entrada</div>
+
+        <div id="camera-start" class="camera-start hidden">
+          <p id="camera-start-text">La cámara está apagada.</p>
+          <button id="btn-start" class="btn btn-primary" type="button">Activar cámara</button>
         </div>
 
-        <div id="manual-wrapper" class="manual-box hidden">
-          <label for="manual-input">Pegar contenido del QR</label>
-          <textarea id="manual-input" rows="4" placeholder='{"id": 1, "nombre": "Juan Pérez", "dni": "38123456", "evento": "Nombre del Evento"}'></textarea>
-          <button id="parse-manual" class="button button-secondary" type="button">Procesar texto manual</button>
+        <div class="scanner-tools">
+          <button id="btn-torch" class="tool hidden" type="button" aria-label="Linterna">Linterna</button>
+          <button id="btn-flip" class="tool hidden" type="button" aria-label="Cambiar cámara">Girar cámara</button>
         </div>
+      </div>
 
-        <div id="scan-result" class="card hidden">
-          <h3>Persona detectada</h3>
-          <div class="detail-row"><span>Nombre</span><strong id="detail-nombre">-</strong></div>
-          <div class="detail-row"><span>DNI</span><strong id="detail-dni">-</strong></div>
-          <div class="detail-row"><span>Entrada N°</span><strong id="detail-id">-</strong></div>
-          <div class="detail-row"><span>Evento</span><strong id="detail-evento">-</strong></div>
-          <button id="checkin-button" class="button button-primary" type="button">Marcar presente</button>
-        </div>
+      <div id="insecure-warning" class="notice notice-warn hidden">
+        <b>La cámara en vivo no funciona en esta dirección.</b>
+        Los celulares solo la permiten con HTTPS. Usá el botón de abajo para sacar una foto al QR,
+        o buscá a la persona en la pestaña <b>Lista</b>.
+      </div>
 
-        <div id="scan-message" class="message"></div>
+      <div class="scan-actions">
+        <label class="btn btn-secondary btn-block" for="photo-input">Escanear con foto</label>
+        <input id="photo-input" type="file" accept="image/*" capture="environment" hidden>
+      </div>
+
+      <div id="last-scans" class="last-scans">
+        <h3>Últimos ingresos</h3>
+        <ul id="last-scans-list"></ul>
       </div>
     </section>
 
-    <section class="panel">
-      <div class="panel-card">
-        <div class="section-heading">
-          <h2>Asistentes presentes</h2>
-          <button id="refresh-button" class="button button-secondary" type="button">Actualizar</button>
+    <!-- ============ LISTA ============ -->
+    <section id="view-list" class="view">
+      <div class="list-tools">
+        <input id="search" type="search" placeholder="Buscar por nombre, DNI o congregación" autocomplete="off" autocapitalize="none" enterkeyhint="search">
+        <div class="chips" role="tablist">
+          <button class="chip active" data-filter="all" type="button">Todos <span id="count-all">0</span></button>
+          <button class="chip" data-filter="in" type="button">Ingresaron <span id="count-in">0</span></button>
+          <button class="chip" data-filter="out" type="button">Faltan <span id="count-out">0</span></button>
         </div>
-        <div id="stats-counter" class="stats-counter">
-          <span id="stats-present">0</span> presentes
-          <span id="stats-total-wrap" class="hidden"> / <span id="stats-total">0</span> en la lista</span>
-        </div>
-        <div id="checkin-list" class="checkin-list"></div>
       </div>
+      <ul id="people" class="people"></ul>
+      <p id="people-empty" class="empty hidden">No hay resultados.</p>
     </section>
+
   </main>
 
+  <nav class="tabbar">
+    <button class="tab active" data-view="view-scan" type="button"><span class="tab-ico">▣</span>Escanear</button>
+    <button class="tab" data-view="view-list" type="button"><span class="tab-ico">☰</span>Lista</button>
+  </nav>
+
+  <!-- Resultado del escaneo (pantalla completa, semáforo) -->
+  <div id="result" class="result hidden" role="alertdialog" aria-live="assertive">
+    <div class="result-card">
+      <div id="result-icon" class="result-icon"></div>
+      <div id="result-title" class="result-title"></div>
+      <div id="result-name" class="result-name"></div>
+      <div id="result-meta" class="result-meta"></div>
+      <div id="result-detail" class="result-detail"></div>
+      <div class="result-tap">Tocá para continuar</div>
+    </div>
+  </div>
+
+  <!-- Detalle / acciones de una persona -->
+  <div id="sheet" class="sheet hidden">
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-panel">
+      <h3 id="sheet-name"></h3>
+      <p id="sheet-meta" class="sheet-meta"></p>
+      <p id="sheet-status" class="sheet-status"></p>
+      <button id="sheet-action" class="btn btn-primary btn-block" type="button"></button>
+      <button class="btn btn-ghost btn-block" type="button" data-close>Cancelar</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
   <script>
-    const EVENT_NAME = "{{ evento | escape }}";
+    window.EVENT_NAME = {{ evento | tojson }};
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="{{ url_for('static', filename='jsQR.js') }}"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
