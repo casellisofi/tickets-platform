@@ -627,7 +627,14 @@ def enviar_whatsapp_auto(asistente, ruta_pdf, adjuntar_pdf=True):
     pyautogui.click(clip_x, clip_y)   # abre el menú adjuntar
     time.sleep(1.5)
     pyautogui.click(doc_x, doc_y)     # elige "Documento" → abre el selector de archivos del SO
-    time.sleep(2)
+
+    # Si el selector de archivos no se abrió, NO pegar nada: si no, la ruta
+    # termina escrita como mensaje en el chat.
+    if not _esperar_dialogo_abrir(abierto=True, timeout=8):
+        pyautogui.press("esc")  # cerrar el menú adjuntar si quedó abierto
+        time.sleep(0.5)
+        _cerrar_pestana()
+        raise RuntimeError("no se adjuntó el PDF (no se abrió la ventana 'Abrir')")
 
     # En el cuadro de diálogo del SO, escribir la ruta del PDF y Enter.
     # Usamos pyperclip + Ctrl+V porque pyautogui.write() puede repetir caracteres
@@ -638,10 +645,48 @@ def enviar_whatsapp_auto(asistente, ruta_pdf, adjuntar_pdf=True):
     pyautogui.hotkey("ctrl", "v")
     time.sleep(0.8)
     pyautogui.press("enter")
+
+    # El diálogo tiene que cerrarse al aceptar el archivo; si sigue abierto, algo falló.
+    if not _esperar_dialogo_abrir(abierto=False, timeout=5):
+        pyautogui.press("esc")
+        time.sleep(0.5)
+        _cerrar_pestana()
+        raise RuntimeError("no se adjuntó el PDF (la ventana 'Abrir' no aceptó el archivo)")
     time.sleep(4)  # esperar preview del documento en WhatsApp
 
     pyautogui.press("enter")  # enviar
     time.sleep(5)  # esperar que termine de subir
+    _cerrar_pestana()
+
+
+_TITULOS_DIALOGO_ABRIR = ("abrir", "open")
+
+
+def _dialogo_abrir_activo():
+    """True si la ventana activa es el selector de archivos de Windows."""
+    import pygetwindow
+    ventana = pygetwindow.getActiveWindow()
+    titulo = (ventana.title if ventana else "").strip().lower()
+    return titulo in _TITULOS_DIALOGO_ABRIR
+
+
+def _esperar_dialogo_abrir(abierto, timeout):
+    """Espera hasta `timeout` segundos a que el diálogo 'Abrir' esté abierto (o cerrado)."""
+    import time
+    limite = time.time() + timeout
+    while time.time() < limite:
+        if _dialogo_abrir_activo() == abierto:
+            return True
+        time.sleep(0.3)
+    return False
+
+
+def _cerrar_pestana():
+    """Cierra la pestaña de WhatsApp Web para que no se acumulen entre envíos."""
+    import pyautogui
+    import time
+    pyautogui.hotkey("ctrl", "w")
+    time.sleep(1)
 
 
 _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
@@ -705,6 +750,10 @@ def preflight_check(asistentes, enviar_email_flag, enviar_wa_flag):
         # Filtros previos
         if a.get("estado") == "enviado":
             ya_enviados.append(a)
+            continue
+        # 'en espera' = cargado pero todavía no hay que enviarle la entrada
+        if a.get("estado") == "en espera":
+            print(f"  ⏸  {a['nombre']} (fila {a['row_num']}) está en espera, salteando.")
             continue
         if CONFIG.get("test_email") and a["email"].strip().lower() != CONFIG["test_email"].strip().lower():
             filtrados_test_email.append(a)
@@ -774,9 +823,9 @@ def _localizar_columna_estado(ws):
     return nueva
 
 
-def _marcar_enviado(wb, ws, estado_col, row_num, ruta_excel):
-    """Marca una fila como 'enviado' y guarda el Excel."""
-    ws.cell(row=row_num, column=estado_col, value="enviado")
+def _marcar_enviado(wb, ws, estado_col, row_num, ruta_excel, estado="enviado"):
+    """Marca una fila con `estado` (por defecto 'enviado') y guarda el Excel."""
+    ws.cell(row=row_num, column=estado_col, value=estado)
     wb.save(ruta_excel)
 
 
@@ -848,7 +897,11 @@ def procesar_asistentes(solo_email=True, abrir_whatsapp=False, enviar_wa_auto=Fa
 
                 # 2. Enviar email
                 email_ok = False
-                if asistente["email"] and "@" in asistente["email"]:
+                if asistente.get("estado") == "falta whatsapp":
+                    # El email ya salió en una corrida anterior; solo falta el WhatsApp.
+                    print(f"  ⏭  Email ya enviado antes, solo falta WhatsApp")
+                    email_ok = True
+                elif asistente["email"] and "@" in asistente["email"]:
                     try:
                         print(f"  📧 Enviando email a {asistente['email']}...")
                         enviar_email(asistente, ruta_pdf)
@@ -882,8 +935,15 @@ def procesar_asistentes(solo_email=True, abrir_whatsapp=False, enviar_wa_auto=Fa
                         print(f"  ⚠️  Error WhatsApp: {e}")
                         errores.append(f"{asistente['nombre']}: WhatsApp falló — {e}")
 
-                # 6. Marcar como enviado si al menos un canal funcionó
-                if email_ok or wa_ok:
+                # 6. Actualizar el estado en el Excel.
+                # Con WhatsApp automático, 'enviado' solo si el PDF se adjuntó por WhatsApp.
+                # Si salió el email pero no el WhatsApp, queda 'falta whatsapp' para
+                # reintentar solo el WhatsApp sin repetir el email.
+                if enviar_wa_auto and asistente["celular"] and not wa_ok:
+                    if email_ok:
+                        _marcar_enviado(wb, ws, estado_col, asistente["row_num"], ruta_excel, "falta whatsapp")
+                        print(f"  📝 Estado actualizado a 'falta whatsapp' en el Excel")
+                elif email_ok or wa_ok:
                     _marcar_enviado(wb, ws, estado_col, asistente["row_num"], ruta_excel)
                     enviados += 1
                     print(f"  📝 Estado actualizado a 'enviado' en el Excel")
